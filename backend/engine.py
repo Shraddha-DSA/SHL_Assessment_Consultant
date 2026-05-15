@@ -1,7 +1,8 @@
 import os
 import json
-import numpy as np
+import pickle
 import faiss
+import numpy as np
 
 from typing import List, Dict, Any
 
@@ -15,68 +16,71 @@ load_dotenv()
 class SHLConsultantEngine:
 
     def __init__(self):
-
-        
-        self.encoder = SentenceTransformer(
-            "all-MiniLM-L6-v2"
-        )
-
         self.groq_client = Groq(
             api_key=os.getenv("GROQ_API_KEY", "")
         )
 
+        
         self.catalog = self._load_catalog()
 
         
-        self.index = self._build_index()
+        self.encoder = None
 
-   
-    def _load_catalog(self) -> List[Dict[str, Any]]:
-
-        file_path = os.path.join(
-            os.path.dirname(__file__),
-            "catalog.json"
+        
+        self.index = faiss.read_index(
+            "backend/faiss_index.bin"
         )
 
-        with open(file_path, "r") as f:
+        
+        with open(
+            "backend/metadata.pkl",
+            "rb"
+        ) as f:
+
+            self.metadata = pickle.load(f)
+
+    
+    def _load_catalog(self):
+
+        with open(
+            "backend/catalog.json",
+            "r"
+        ) as f:
+
             return json.load(f)
 
     
-    def _build_index(self):
+    def get_encoder(self):
 
-        texts = []
+        if self.encoder is None:
 
-        for item in self.catalog:
+            print(
+                "Loading sentence transformer model..."
+            )
 
-            text = f"""
-            Name: {item['name']}
-            Description: {item['description']}
-            Type: {item['test_type']}
-            """
+            self.encoder = SentenceTransformer(
+                "all-MiniLM-L6-v2",
+                device="cpu"
+            )
 
-            texts.append(text)
+            print(
+                "Sentence transformer loaded."
+            )
 
-        embeddings = self.encoder.encode(texts)
+        return self.encoder
 
-        embeddings = np.array(
-            embeddings
-        ).astype("float32")
-
-        dimension = embeddings.shape[1]
-
-        index = faiss.IndexFlatL2(dimension)
-
-        index.add(embeddings)
-
-        return index
-
+    
     def search_catalog(
         self,
         query: str,
         k: int = 5
-    ) -> List[Dict[str, Any]]:
+    ):
 
-        query_embedding = self.encoder.encode([query])
+        encoder = self.get_encoder()
+
+        query_embedding = encoder.encode(
+            [query]
+        )
 
         query_embedding = np.array(
             query_embedding
@@ -91,10 +95,10 @@ class SHLConsultantEngine:
 
         for idx in indices[0]:
 
-            if idx < len(self.catalog):
+            if idx < len(self.metadata):
 
                 results.append(
-                    self.catalog[idx]
+                    self.metadata[idx]
                 )
 
         return results
@@ -103,7 +107,7 @@ class SHLConsultantEngine:
     def build_conversation_context(
         self,
         messages: List[Dict[str, str]]
-    ) -> str:
+    ):
 
         conversation = []
 
@@ -118,50 +122,53 @@ class SHLConsultantEngine:
 
         return "\n".join(conversation)
 
-
+    
     def needs_clarification(
         self,
-        messages: List[Dict[str, str]]
-    ) -> bool:
+        messages
+    ):
 
-        latest_message = messages[-1]["content"].lower()
+        latest_message = (
+            messages[-1]["content"]
+            .lower()
+            .strip()
+        )
 
-        vague_phrases = [
+        vague_queries = [
+            "test",
+            "assessment",
             "need assessment",
             "need test",
-            "hiring",
-            "need hiring test",
-            "assessment",
-            "test"
+            "hiring"
         ]
 
-        
-        if len(latest_message.split()) <= 3:
+        if (
+            len(latest_message.split()) <= 3
+        ):
             return True
 
-        for phrase in vague_phrases:
-
-            if phrase == latest_message:
-                return True
+        if latest_message in vague_queries:
+            return True
 
         return False
 
     
     def generate_response(
         self,
-        messages: List[Dict[str, str]]
-    ) -> Dict[str, Any]:
+        messages
+    ):
 
         try:
-
-            
-            if self.needs_clarification(messages):
+            if self.needs_clarification(
+                messages
+            ):
 
                 return {
                     "reply": (
-                        "Could you share more details "
-                        "about the role, seniority level, "
-                        "and skills you are hiring for?"
+                        "Could you provide more "
+                        "details about the role, "
+                        "skills, or seniority level "
+                        "you are hiring for?"
                     ),
                     "recommendations": [],
                     "end_of_conversation": False
@@ -174,10 +181,12 @@ class SHLConsultantEngine:
                 )
             )
 
-            
-            retrieved_items = self.search_catalog(
-                conversation_context,
-                k=5
+           
+            retrieved_items = (
+                self.search_catalog(
+                    conversation_context,
+                    k=5
+                )
             )
 
             
@@ -195,32 +204,27 @@ Description: {item['description']}
 
            
             system_prompt = f"""
-You are an expert SHL Assessment Recommendation Agent.
+You are an SHL Assessment Recommendation Agent.
 
-Your task is to recommend ONLY SHL assessments
+You must recommend ONLY assessments
 from the retrieved catalog context.
 
 RETRIEVED CATALOG:
 {retrieval_context}
 
 RULES:
-
-1. Recommend ONLY assessments from retrieved catalog.
-2. Never hallucinate assessment names or URLs.
-3. Ask clarifying questions if information is insufficient.
-4. Handle refinement naturally.
+1. Recommend ONLY from retrieved catalog.
+2. Never hallucinate assessment names.
+3. Never hallucinate URLs.
+4. Ask clarifying questions if needed.
 5. Compare assessments factually.
-6. Refuse unrelated questions.
-
-IMPORTANT:
-- Recommendations must contain between 1 and 10 items.
-- Use exact names and URLs from catalog.
+6. Refuse unrelated requests.
 
 OUTPUT FORMAT:
 Return ONLY valid JSON.
 
 {{
-  "reply": "response text",
+  "reply": "response",
   "recommendations": [
     {{
       "name": "assessment name",
@@ -232,20 +236,26 @@ Return ONLY valid JSON.
 }}
 """
 
-            
-            response = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-                    *messages
-                ],
-                temperature=0.1,
-                response_format={
-                    "type": "json_object"
-                }
+           
+            response = (
+                self.groq_client
+                .chat
+                .completions
+                .create(
+                    model=(
+                        "llama-3.3-70b-versatile"
+                    ),
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                system_prompt
+                            )
+                        },
+                        *messages
+                    ],
+                    temperature=0.1
+                )
             )
 
             raw_output = (
@@ -255,7 +265,9 @@ Return ONLY valid JSON.
                 .content
             )
 
-            result = json.loads(raw_output)
+            result = json.loads(
+                raw_output
+            )
 
            
             validated_recommendations = []
@@ -274,15 +286,22 @@ Return ONLY valid JSON.
 
                 if name in catalog_lookup:
 
-                    real_item = catalog_lookup[name]
+                    real_item = (
+                        catalog_lookup[name]
+                    )
 
                     validated_recommendations.append({
-                        "name": real_item["name"],
-                        "url": real_item["url"],
-                        "test_type": real_item["test_type"]
+                        "name": (
+                            real_item["name"]
+                        ),
+                        "url": (
+                            real_item["url"]
+                        ),
+                        "test_type": (
+                            real_item["test_type"]
+                        )
                     })
 
-            
             validated_recommendations = (
                 validated_recommendations[:10]
             )
@@ -290,7 +309,7 @@ Return ONLY valid JSON.
             return {
                 "reply": result.get(
                     "reply",
-                    "I could not process your request."
+                    "Unable to generate response."
                 ),
                 "recommendations": (
                     validated_recommendations
@@ -303,13 +322,15 @@ Return ONLY valid JSON.
 
         except Exception as e:
 
-            print("ERROR:", str(e))
+            print(
+                "ERROR:",
+                str(e)
+            )
 
             return {
-        "reply": (
-            f"Internal Error: {str(e)}"
-        ),
-        "recommendations": [],
-        "end_of_conversation": False
-    }
-            
+                "reply": (
+                    f"Internal Error: {str(e)}"
+                ),
+                "recommendations": [],
+                "end_of_conversation": False
+            }
