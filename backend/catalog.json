@@ -1,0 +1,50 @@
+[
+  {
+    "name": "OPQ32r",
+    "url": "https://www.shl.com/solutions/products/opq/",
+    "test_type": "P",
+    "description": "Occupational Personality Questionnaire. Measures 32 dimensions of personality to predict job performance and fit."
+  },
+  {
+    "name": "Verify G+ (General Ability)",
+    "url": "https://www.shl.com/solutions/products/verify-interactive-g-plus/",
+    "test_type": "C",
+    "description": "Measures general cognitive ability through numerical, inductive, and deductive reasoning tasks."
+  },
+  {
+    "name": "Java 8 (Knowledge)",
+    "url": "https://www.shl.com/solutions/products/it-and-technical-skills/",
+    "test_type": "K",
+    "description": "Assesses technical proficiency in Java 8 development, covering syntax, libraries, and best practices."
+  },
+  {
+    "name": "Python (Knowledge)",
+    "url": "https://www.shl.com/solutions/products/it-and-technical-skills/",
+    "test_type": "K",
+    "description": "Technical assessment for Python developers focusing on data structures, algorithms, and core language features."
+  },
+  {
+    "name": "Numerical Reasoning",
+    "url": "https://www.shl.com/solutions/products/numerical-reasoning-tests/",
+    "test_type": "C",
+    "description": "Measures the ability to work with numerical data and interpret graphs and charts."
+  },
+  {
+    "name": "Deductive Reasoning",
+    "url": "https://www.shl.com/solutions/products/deductive-reasoning-tests/",
+    "test_type": "C",
+    "description": "Evaluates logical thinking and the ability to draw conclusions from provided information."
+  },
+  {
+    "name": "Scruples (Integrity)",
+    "url": "https://www.shl.com/solutions/products/scruples-integrity-test/",
+    "test_type": "P",
+    "description": "A situational judgment test measuring workplace integrity and ethical behavior."
+  },
+  {
+    "name": "Dependability and Safety Instrument (DSI)",
+    "url": "https://www.shl.com/solutions/products/dependability-and-safety-instrument/",
+    "test_type": "P",
+    "description": "Predicts reliable behavior and adherence to safety protocols in operational environments."
+  }
+]

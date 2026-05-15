@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: shl-assessment-service
+    env: python
+    # Standard build command to install dependencies from requirements.txt
+    buildCommand: pip install -r requirements.txt
+    # Start command pointing to the app inside the backend folder
+    # Note: We use the module path 'backend.main:app'
+    startCommand: python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false # You will enter your actual API Key in the Render dashboard
+      - key: PYTHONPATH
+        value: . # This ensures Python can find the 'backend' folder as a package
+      - key: PYTHON_VERSION
+        value: 3.11.0
